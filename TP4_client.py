@@ -7,8 +7,6 @@ Noms et numéros étudiants:
 """
 
 import argparse
-import getpass
-import json
 import socket
 import sys
 
@@ -71,10 +69,10 @@ class Client:
             print(response.payload)
 
     def _get_credentials(self) -> gloutils.AuthPayload:
-        userName = input("userName : ")
+        user_name = input("userName : ")
         password = input("password : ")
 
-        return gloutils.AuthPayload(username=userName, password=password)
+        return gloutils.AuthPayload(username=user_name, password=password)
 
     def _quit(self) -> None:
         """
@@ -121,19 +119,16 @@ class Client:
         choice = input("enter the number of the email you would like to consult")
         return choice # TODO : ajouter vérificaton que c'est bien dans la liste
 
-    def _read_selected_email(self, emailId: int) -> None:
+    def _read_selected_email(self, email_id: int) -> None:
         """
         get the selected email from the server and displays it
         """
-        payload = gloutils.EmailChoicePayload(emailId)
+        payload = gloutils.EmailChoicePayload(email_id)
         response = self._send(gloutils.Headers.INBOX_READING_CHOICE, payload)
 
         if response.header == gloutils.Headers.OK:
-
             email = gloutils.EmailContentPayload(response.payload)
-            display = gloutils.EMAIL_DISPLAY()
-
-            print(email)
+            print(_email_display(email))
         else:
             print(response.payload)
 
@@ -159,7 +154,7 @@ class Client:
 
         if response.header == gloutils.Headers.OK:
             stats = gloutils.StatsPayload(response.payload)
-            print(gloutils.STATS_DISPLAY(stats))
+            print(_stats_display(stats))
         else:
             print(response.payload)
 
@@ -181,6 +176,7 @@ class Client:
     def _send(self, header, payload):
         """
         abstracts the encapsulation, communication and checks for errors and stuff
+        TODO : I guess some verifications or something
         """
         message = gloutils.GloMessage(
             header=header,
@@ -214,6 +210,23 @@ def _main() -> int:
     client = Client(args.dest)
     client.run()
     return 0
+
+
+def _email_display(email: gloutils.EmailContentPayload) -> str:
+    return gloutils.EMAIL_DISPLAY(
+        sender=email.sender,
+        to=email.destination,
+        subject=email.subject,
+        date=email.date,
+        body=email.content
+    )
+
+
+def _stats_display(stats: gloutils.StatsPayload) -> str:
+    return gloutils.STATS_DISPLAY(
+        count=stats.count,
+        size=stats.size
+    )
 
 
 if __name__ == '__main__':
