@@ -46,7 +46,7 @@ class Client:
         """
         payload = self._get_credentials()
         response = self._send(gloutils.Headers.AUTH_REGISTER, payload)
-        
+
         if response.header == gloutils.Headers.OK:
             self._username = payload.username
         else:
@@ -117,7 +117,7 @@ class Client:
             print(f"{id} : {email}")
 
         choice = input("enter the number of the email you would like to consult")
-        return choice # TODO : ajouter vérificaton que c'est bien dans la liste
+        return choice  # TODO : ajouter vérificaton que c'est bien dans la liste
 
     def _read_selected_email(self, email_id: int) -> None:
         """
@@ -144,6 +144,34 @@ class Client:
         Transmet ces informations avec l'entête `EMAIL_SENDING`.
         """
 
+        payload = self._make_email_content_payload()
+        response = self._send(gloutils.Headers.EMAIL_SENDING, payload)
+        # TODO : handle returns in case of failure?
+
+    def _make_email_content_payload(self):
+        dest, sub, body = self._get_email_infos()
+
+        return gloutils.EmailContentPayload(
+            sender=f"{self._username}.{gloutils.SERVER_DOMAIN}",
+            destination=dest,
+            subject=sub,
+            date=gloutils.get_current_utc_time(),
+            content=body
+        )
+
+    def _get_email_infos(self) -> (str, str, str):
+        """
+        asks the user for the informations necessary for the email
+
+        TODO : checks that the body ends with a single dot on a line
+        TODO : checks on the user's adress and stuff
+        """
+        dest: str = input("adresse email du destinataire : ")
+        subject: str = input("sujet du message : ")
+        body: str = input("corps du message : ")
+
+        return dest, subject, body
+
     def _check_stats(self) -> None:
         """
         Demande les statistiques au serveur avec l'entête `STATS_REQUEST`.
@@ -158,7 +186,6 @@ class Client:
         else:
             print(response.payload)
 
-
     def _logout(self) -> None:
         """
         Préviens le serveur avec l'entête `AUTH_LOGOUT`.
@@ -171,7 +198,6 @@ class Client:
             self._username = None
         else:
             print(response.payload)
-
 
     def _send(self, header, payload):
         """
@@ -194,11 +220,30 @@ class Client:
 
         while not should_quit:
             if not self._username:
-                # Authentication menu
-                pass
+                action = input(gloutils.CLIENT_AUTH_CHOICE)
+
+                if action == 1:
+                    self._register()
+                elif action == 2:
+                    self._login()
+                elif action == 3:
+                    self._quit()
+                    should_quit = True
+                else:
+                    print("La valeur entrée ne corresponds pas à une des options listées")
             else:
-                # Main menu
-                pass
+                action = input(gloutils.CLIENT_USE_CHOICE)
+
+                if action == 1:
+                    self._read_email()
+                elif action == 2:
+                    self._send_email()
+                elif action == 3:
+                    self._check_stats()
+                elif action == 4:
+                    self._logout()
+                else:
+                    print("La valeur entrée ne corresponds pas à une des options listées")
 
 
 def _main() -> int:
