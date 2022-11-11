@@ -36,17 +36,12 @@ class Server:
 
         S'assure que les dossiers de données du serveur existent.
         """
-        # self._client_socs
-        # self._logged_users
-        # ...
 
         self._server_socket = self._make_server_socket("127.0.0.1", gloutils.APP_PORT)
-        self.connected_clients = []
-        self.clients_dic = {}
+        self._client_socs: list[socket.socket] = []
+        self._logged_users = {}
         server_data_dir: pathlib.Path = pathlib.Path(gloutils.SERVER_DATA_DIR)
-        server_lost_dir: pathlib.Path = pathlib.Path(os.join(server_data_dir, gloutils.SERVER_LOST_DIR))
-        while True:
-            select.select()
+        server_lost_dir: pathlib.Path = pathlib.Path(os.path.join(server_data_dir, gloutils.SERVER_LOST_DIR))
 
     def cleanup(self) -> None:
         """Ferme toutes les connexions résiduelles."""
@@ -67,20 +62,14 @@ class Server:
             print("Something went wrong when opening the server's socket")
             sys.exit(-1)
 
-    def _make_client_socket(self, destination: str, port: int) -> socket.socket:
-        """ setup for the client socket """
-        try:
-            client_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_soc.connect((destination, port))
-            return client_soc
-        except glosocket.GLOSocketError:
-            sys.exit(-1)
-
     def _accept_client(self) -> None:
         """Accepte un nouveau client."""
+        client_socket, _ = self._server_socket.accept()
+        self._client_socs.append(client_socket)
 
     def _remove_client(self, client_soc: socket.socket) -> None:
         """Retire le client des structures de données et ferme sa connexion."""
+        # TODO : maybe vérifier si le client est logged out avant?
 
     def _create_account(self, client_soc: socket.socket,
                         payload: gloutils.AuthPayload
@@ -151,12 +140,48 @@ class Server:
 
     def run(self):
         """Point d'entrée du serveur."""
-        waiters = []
         while True:
             # Select readable sockets
+            result = select.select(self._client_socs + [self._server_socket], [], [])
+            waiters: list[socket.socket] = result[0]
             for waiter in waiters:
-                # Handle sockets
-                pass
+                if waiter == self._server_socket:
+                    self._accept_client()
+                else:
+                    self._process_client(waiter)
+
+    def _process_client(self, client_socket: socket.socket):
+        try:
+            message = glosocket.recv_msg(client_socket)
+        except glosocket.GLOSocketError as e:
+            print(f"an esception occured : {e}")
+            self._remove_client(client_socket)
+            return
+
+        match json.loads(message):
+            case {"header": gloutils.Headers.AUTH_REGISTER, "payload": payload}:
+                self._send(client_socket, self._create_account(client_socket, payload))
+            case {"header": gloutils.Headers.AUTH_LOGIN, "payload": payload}:
+                self._send(client_socket, self._login(client_socket, payload))
+            case {"header": gloutils.Headers.AUTH_LOGOUT}:
+                self._logout()
+            case {"header": gloutils.Headers.INBOX_READING_REQUEST}:
+                self._send(client_socket, self._get_email_list())
+            case {"header": gloutils.Headers.INBOX_READING_CHOICE, "payload": payload}:
+                self._send(client_socket, self._get_email(payload))
+            case {"header": gloutils.Headers.EMAIL_SENDING, "payload": payload}:
+                self._send(client_socket, self._send_email(payload))
+            case {"header": gloutils.Headers.STATS_REQUEST}:
+                self._send(client_socket, self._get_stats(client_socket))
+            case {"header": gloutils.Headers.BYE}:
+                self._remove_client(client_socket)
+
+    def _send(self, dest: socket.socket, payload) -> None:
+        try:
+            glosocket.send_msg(dest, payload)
+        except glosocket.GLOSocketError as e:
+            print(f"error : {e}")
+            self._remove_client(dest)
 
 
 def _main() -> int:
