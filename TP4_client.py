@@ -7,6 +7,7 @@ Noms et numéros étudiants:
 """
 
 import argparse
+import json
 import socket
 import sys
 
@@ -44,13 +45,13 @@ class Client:
         Si la création du compte s'est effectuée avec succès, l'attribut
         `_username` est mis à jour, sinon l'erreur est affichée.
         """
-        payload = self._get_credentials()
-        response = self._send(gloutils.Headers.AUTH_REGISTER, payload)
+        payload: gloutils.AuthPayload = self._get_credentials()
+        response = self._send_receive(gloutils.Headers.AUTH_REGISTER, payload)
 
-        if response.header == gloutils.Headers.OK:
-            self._username = payload.username
+        if response["header"] == gloutils.Headers.OK:
+            self._username = payload["username"]
         else:
-            print(response.payload)
+            print(response["payload"])
 
     def _login(self) -> None:
         """
@@ -60,13 +61,13 @@ class Client:
         Si la connexion est effectuée avec succès, l'attribut `_username`
         est mis à jour, sinon l'erreur est affichée.
         """
-        payload = self._get_credentials()
-        response = self._send(gloutils.Headers.AUTH_LOGIN, payload)
+        payload: gloutils.AuthPayload = self._get_credentials()
+        response = self._send_receive(gloutils.Headers.AUTH_LOGIN, payload)
 
-        if response.header == gloutils.Headers.OK:
-            self._username = payload.username
+        if response["header"] == gloutils.Headers.OK:
+            self._username = payload["username"]
         else:
-            print(response.payload)
+            print(response["payload"])
 
     def _get_credentials(self) -> gloutils.AuthPayload:
         user_name = input("userName : ")
@@ -79,7 +80,8 @@ class Client:
         Préviens le serveur de la déconnexion avec l'entête `BYE` et ferme le
         socket du client.
         """
-        self._send(gloutils.Headers.BYE)
+        message = gloutils.GloMessage(header=gloutils.Headers.BYE)
+        glosocket.send_msg(self._socket, json.dumps(message))
         self._socket.close()
 
     def _read_email(self) -> None:
@@ -95,15 +97,16 @@ class Client:
         S'il n'y a pas de courriel à lire, l'utilisateur est averti avant de
         retourner au menu principal.
         """
-        response = self._send(gloutils.Headers.INBOX_READING_REQUEST)
-        if response.header == gloutils.Headers.OK:
-            emails = gloutils.EmailListPayload(response.payload)
+        response = self._send_receive(gloutils.Headers.INBOX_READING_REQUEST)
+        if response["header"] == gloutils.Headers.OK:
+            response_payload = response["payload"]
+            emails = gloutils.EmailListPayload(email_list=response_payload["email_list"])
 
-            if len(emails) == 0:
+            if len(emails.email_list) == 0:
                 print("there is no emails in your inbox")
                 return
 
-            choice = self._get_inbox_reading_choice(emails)
+            choice = self._get_inbox_reading_choice(emails["email_list"])
             self._read_selected_email(choice)
         else:
             print(response.payload)
@@ -124,13 +127,13 @@ class Client:
         get the selected email from the server and displays it
         """
         payload = gloutils.EmailChoicePayload(email_id)
-        response = self._send(gloutils.Headers.INBOX_READING_CHOICE, payload)
+        response = self._send_receive(gloutils.Headers.INBOX_READING_CHOICE, payload)
 
-        if response.header == gloutils.Headers.OK:
-            email = gloutils.EmailContentPayload(response.payload)
+        if response["header"] == gloutils.Headers.OK:
+            email = _email_content(response["payload"])
             print(_email_display(email))
         else:
-            print(response.payload)
+            print(response["payload"])
 
     def _send_email(self) -> None:
         """
@@ -145,7 +148,7 @@ class Client:
         """
 
         payload = self._make_email_content_payload()
-        response = self._send(gloutils.Headers.EMAIL_SENDING, payload)
+        self._send(gloutils.Headers.EMAIL_SENDING, payload)
         # TODO : handle returns in case of failure?
 
     def _make_email_content_payload(self):
@@ -178,13 +181,13 @@ class Client:
 
         Affiche les statistiques à l'aide du gabarit `STATS_DISPLAY`.
         """
-        response = self._send(gloutils.Headers.STATS_REQUEST)
+        response = self._send_receive(gloutils.Headers.STATS_REQUEST)
 
-        if response.header == gloutils.Headers.OK:
-            stats = gloutils.StatsPayload(response.payload)
+        if response["header"] == gloutils.Headers.OK:
+            stats = _payload_to_stats(response["payload"])
             print(_stats_display(stats))
         else:
-            print(response.payload)
+            print(response["payload"])
 
     def _logout(self) -> None:
         """
@@ -192,27 +195,28 @@ class Client:
 
         Met à jour l'attribut `_username`.
         """
-        response = self._send(gloutils.Headers.AUTH_LOGOUT)
+        message = gloutils.GloMessage(header=gloutils.Headers.AUTH_LOGOUT)
+        glosocket.send_msg(self._socket, json.dumps(message))
+        self._username = None
 
-        if gloutils.Headers(response) == gloutils.Headers.OK:
-            self._username = None
-        else:
-            print(response.payload)
-
-    def _send(self, header, payload):
+    def _send_receive(self, header, payload):
         """
         abstracts the encapsulation, communication and checks for errors and stuff
         TODO : I guess some verifications or something
         """
+        self._send(header, payload)
+        response = glosocket.recv_msg(self._socket)
+        print(f"DEBUGGING : response message : {response}")
+
+        return json.loads(response)
+
+    def _send(self, header, payload) -> None:
         message = gloutils.GloMessage(
             header=header,
             payload=payload
         )
 
-        glosocket.send_msg(self._socket, message)
-        response = gloutils.GloMessage(glosocket.recv_msg(self._socket))
-
-        return response
+        glosocket.send_msg(self._socket, json.dumps(message))
 
     def run(self) -> None:
         """Point d'entrée du client."""
@@ -220,30 +224,32 @@ class Client:
 
         while not should_quit:
             if not self._username:
-                action = input(gloutils.CLIENT_AUTH_CHOICE)
+                action = input(f"{gloutils.CLIENT_AUTH_CHOICE}\n")
 
-                if action == 1:
-                    self._register()
-                elif action == 2:
-                    self._login()
-                elif action == 3:
-                    self._quit()
-                    should_quit = True
-                else:
-                    print("La valeur entrée ne corresponds pas à une des options listées")
+                match int(action):
+                    case 1:
+                        self._register()
+                    case 2:
+                        self._login()
+                    case 3:
+                        self._quit()
+                        should_quit = True
+                    case _:
+                        print("La valeur entrée ne corresponds pas à une des options listées")
             else:
-                action = input(gloutils.CLIENT_USE_CHOICE)
+                action = input(f"{gloutils.CLIENT_USE_CHOICE}\n")
 
-                if action == 1:
-                    self._read_email()
-                elif action == 2:
-                    self._send_email()
-                elif action == 3:
-                    self._check_stats()
-                elif action == 4:
-                    self._logout()
-                else:
-                    print("La valeur entrée ne corresponds pas à une des options listées")
+                match int(action):
+                    case 1:
+                        self._read_email()
+                    case 2:
+                        self._send_email()
+                    case 3:
+                        self._check_stats()
+                    case 4:
+                        self._logout()
+                    case _:
+                        print("La valeur entrée ne corresponds pas à une des options listées")
 
 
 def _main() -> int:
@@ -257,20 +263,37 @@ def _main() -> int:
     return 0
 
 
+def _payload_to_stats(stats: str) -> gloutils.StatsPayload:
+    return gloutils.StatsPayload(
+        count=stats["count"],
+        size=stats["size"]
+    )
+
+
+def _email_content(email: str) -> gloutils.EmailContentPayload:
+    return gloutils.EmailContentPayload(
+        sender=email["sender"],
+        destination=email["destination"],
+        subject=email["subject"],
+        date=email["date"],
+        content=email["content"]
+    )
+
+
 def _email_display(email: gloutils.EmailContentPayload) -> str:
     return gloutils.EMAIL_DISPLAY(
-        sender=email.sender,
-        to=email.destination,
-        subject=email.subject,
-        date=email.date,
-        body=email.content
+        sender=email["sender"],
+        to=email["destination"],
+        subject=email["subject"],
+        date=email["date"],
+        body=email["content"]
     )
 
 
 def _stats_display(stats: gloutils.StatsPayload) -> str:
     return gloutils.STATS_DISPLAY(
-        count=stats.count,
-        size=stats.size
+        count=stats["count"],
+        size=stats["size"]
     )
 
 

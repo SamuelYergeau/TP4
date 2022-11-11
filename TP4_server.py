@@ -38,6 +38,7 @@ class Server:
         """
 
         self._server_socket = self._make_server_socket("127.0.0.1", gloutils.APP_PORT)
+        print(f"DEBUGGING : server socket : {self._server_socket}")
         self._client_socs: list[socket.socket] = []
         self._logged_users = {}
         server_data_dir: pathlib.Path = pathlib.Path(gloutils.SERVER_DATA_DIR)
@@ -69,7 +70,7 @@ class Server:
 
     def _remove_client(self, client_soc: socket.socket) -> None:
         """Retire le client des structures de données et ferme sa connexion."""
-        # TODO : maybe vérifier si le client est logged out avant?
+        self._client_socs.remove(client_soc)
 
     def _create_account(self, client_soc: socket.socket,
                         payload: gloutils.AuthPayload
@@ -81,7 +82,11 @@ class Server:
         associe le socket au nouvel l'utilisateur et retourne un succès,
         sinon retourne un message d'erreur.
         """
-        return gloutils.GloMessage()
+        print(f"DEBUGGING : creating a new account with payload : {payload}")
+        # TODO : ajouter validation des identifiants
+        # TODO : créer le dossier de l'utilisateur
+        # TODO : associer le socket au nouvel utilisateur
+        return gloutils.GloMessage(header=gloutils.Headers.OK)
 
     def _login(self, client_soc: socket.socket, payload: gloutils.AuthPayload
                ) -> gloutils.GloMessage:
@@ -91,10 +96,13 @@ class Server:
         Si les identifiants sont valides, associe le socket à l'utilisateur et
         retourne un succès, sinon retourne un message d'erreur.
         """
+        print(f"DEBUGGING : login for payload : {payload}")
         return gloutils.GloMessage()
 
     def _logout(self, client_soc: socket.socket) -> None:
         """Déconnecte un utilisateur."""
+        print(f"DEBUGGING : logging out user - disconnection socket {client_soc}")
+        client_soc.close()
 
     def _get_email_list(self, client_soc: socket.socket
                         ) -> gloutils.GloMessage:
@@ -105,6 +113,7 @@ class Server:
 
         Une absence de courriel n'est pas une erreur, mais une liste vide.
         """
+        print(f"DEBUGGING : get email list")
         return gloutils.GloMessage()
 
     def _get_email(self, client_soc: socket.socket,
@@ -114,6 +123,7 @@ class Server:
         Récupère le contenu de l'email dans le dossier de l'utilisateur associé
         au socket.
         """
+        print(f"DEBUGGING : get email for payload : {payload}")
         return gloutils.GloMessage()
 
     def _get_stats(self, client_soc: socket.socket) -> gloutils.GloMessage:
@@ -121,6 +131,7 @@ class Server:
         Récupère le nombre de courriels et la taille du dossier et des fichiers
         de l'utilisateur associé au socket.
         """
+        print(f"DEBUGGING : get stats")
         return gloutils.GloMessage()
 
     def _send_email(self, payload: gloutils.EmailContentPayload
@@ -136,6 +147,7 @@ class Server:
 
         Retourne un messange indiquant le succès ou l'échec de l'opération.
         """
+        print(f"DEBUGGING : send email for payload {payload}")
         return gloutils.GloMessage()
 
     def run(self):
@@ -153,8 +165,9 @@ class Server:
     def _process_client(self, client_socket: socket.socket):
         try:
             message = glosocket.recv_msg(client_socket)
+            print(f"DEBUGGING : message received : {message}")
         except glosocket.GLOSocketError as e:
-            print(f"an esception occured : {e}")
+            print(f"an exeption occured : {e}")
             self._remove_client(client_socket)
             return
 
@@ -164,9 +177,9 @@ class Server:
             case {"header": gloutils.Headers.AUTH_LOGIN, "payload": payload}:
                 self._send(client_socket, self._login(client_socket, payload))
             case {"header": gloutils.Headers.AUTH_LOGOUT}:
-                self._logout()
+                self._logout(client_socket)
             case {"header": gloutils.Headers.INBOX_READING_REQUEST}:
-                self._send(client_socket, self._get_email_list())
+                self._send(client_socket, self._get_email_list(client_socket))
             case {"header": gloutils.Headers.INBOX_READING_CHOICE, "payload": payload}:
                 self._send(client_socket, self._get_email(payload))
             case {"header": gloutils.Headers.EMAIL_SENDING, "payload": payload}:
@@ -178,7 +191,7 @@ class Server:
 
     def _send(self, dest: socket.socket, payload) -> None:
         try:
-            glosocket.send_msg(dest, payload)
+            glosocket.send_msg(dest, json.dumps(payload))
         except glosocket.GLOSocketError as e:
             print(f"error : {e}")
             self._remove_client(dest)
