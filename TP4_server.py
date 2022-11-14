@@ -46,8 +46,6 @@ class Server:
         server_lost_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, gloutils.SERVER_LOST_DIR)
         if not os.path.exists(server_lost_dir_path):
             os.makedirs(server_lost_dir_path)
-        while True :
-            select.select(_accept_client(self))
             
 
     def cleanup(self) -> None:
@@ -89,35 +87,21 @@ class Server:
         sinon retourne un message d'erreur.
         """
         print(f"DEBUGGING : creating a new account with payload : {payload}")
-        # TODO : ajouter validation des identifiants
-        # TODO : créer le dossier de l'utilisateur
-        # TODO : associer le socket au nouvel utilisateur
         username = payload['username']
         password = payload['password']
-        # Vérifier le string nom utilisateur
-        if re.search(r"[^._-\w]", username) is not None:
-            errorPayload = ErrorPayload(error_message="le nom d’utilisateur contient des caractères autres que alphanumériques,_, . ou -.")
-            return gloutils.GloMessage(header= gloutils.Headers.ERROR, payload=errorPayload)
-        #Vérifier que le dossier n'existe pas ou le créer
         user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
-        if os.path.exists(user_dir_path) :
-            errorPayload = ErrorPayload(error_message="ce nom d'utilisateur existe déjà")
-            return gloutils.GloMessage(header= gloutils.Headers.ERROR, payload=errorPayload)
-        else :
-            os.makedirs(user_dir_path)
-        #Vérifier le mot de passe
-        if len(password)<10 or re.search(r"[a-z]+[A-Z]+[0-9]+", password) is None :
-            errorPayload = ErrorPayload(error_message="le mot de passe a moins de 10 caractères et/ou ne contient pas au moins une majuscule, une minuscule et un chiffre")
-            return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload = errorPayload)
-        #Hacher et sauvegarder le mot de passe
-        password_file_path = os.path.join(user_dir_path, gloutils.PASSWORD_FILENAME)
-        password_file = open(password_file_path, "w+")
-        gfg = hashlib.sha3_512()
-        gfg.update(password)
-        password_file.write(gfg.digest())
-        password_file.close()
-        #Associer le socket au nouvel utilisateur
-        self._logged_users.add[client_soc]=username
+
+        if not _is_username_valid(username):
+            return _error_message(f"le nom d’utilisateur {username} contient des caractères autres que alphanumériques,_, . ou -.")
+        if not _is_password_valid(password):
+            return _error_message("le mot de passe a moins de 10 caractères et/ou ne contient pas au moins une majuscule, une minuscule et un chiffre")
+        if os.path.exists(user_dir_path):
+            return _error_message("ce nom d'utilisateur existe déjà")
+
+        os.makedirs(user_dir_path)
+        _save_password(user_dir_path, password)
+
+        self._link_socket_to_user(client_soc, username)
         return gloutils.GloMessage(header=gloutils.Headers.OK)
 
     def _login(self, client_soc: socket.socket, payload: gloutils.AuthPayload
@@ -131,25 +115,22 @@ class Server:
         print(f"DEBUGGING : login for payload : {payload}")
         username = payload['username']
         password = payload['password']
-        #S'assurer que l'utilisateur existe
         user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
-        if  not os.path.exists(user_dir_path) :
-            errorPayload = ErrorPayload(error_message="cet utilisateur n'existe pas")
-            return gloutils.GloMessage(header= gloutils.Headers.ERROR, payload=errorPayload)
-        #Hacher le mot de passe et le vérifier
-        password_file_path = os.path.join(user_dir_path, gloutils.PASSWORD_FILENAME)
-        password_file = open(password_file_path, "r+")
-        hash_password = password_file.read()
-        password_file.close()  
-        gfg = hashlib.sha3_512()
-        gfg.update(password)
-        if not gfg.digest() == hash_password :
-            errorPayload = ErrorPayload(error_message="mauvais mot de passe")
-            return gloutils.GloMessage(header= gloutils.Headers.ERROR, payload=errorPayload)
-        self._logged_users.add[client_soc]=username
-        successPayload = gloutils.AuthPayload(username=username, password=password)
+
+        if not os.path.exists(user_dir_path):
+            return _error_message("cet utilisateur n'existe pas")
+
+        saved_password = _read_password(user_dir_path)
+        given_password = _hash_password(password)
+        if not given_password == saved_password:
+            return _error_message("mauvais mot de passe")
+
+        self._link_socket_to_user(client_soc, username)
+        payload = gloutils.AuthPayload(username=username, password=password)
         return gloutils.GloMessage(header=gloutils.Headers.OK, payload=payload)
 
+    def _link_socket_to_user(self, client_soc: socket.socket, username: str) -> None:
+        self._logged_users[client_soc] = username
 
     def _logout(self, client_soc: socket.socket) -> None:
         """Déconnecte un utilisateur."""
@@ -249,6 +230,49 @@ class Server:
         except glosocket.GLOSocketError as e:
             print(f"error : {e}")
             self._remove_client(dest)
+
+
+def _error_message(message: str) -> gloutils.GloMessage:
+    errorPayload = gloutils.ErrorPayload(error_message=message)
+    return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=errorPayload)
+
+
+def _is_username_valid(username: str) -> bool:
+    """
+    vérifies que le nom d'utilisateur ne contient pas des
+    caractères autres que alphanumériques,_, . ou -.
+    TODO : figure out how to make the check search for -. instead of bot - and .
+    """
+    return re.search(r"[^\w_.-.]", username) is None
+
+
+def _is_password_valid(password: str) -> bool:
+    """
+    vérifies que le mot de passe a moins de 10 caractères et
+    contient au moins une majuscule, une minuscule et un chiffre
+    """
+    return len(password) >= 10 or re.search(r"(?=0-9)(?=a-z)(?=A-Z)", password) is not None
+
+
+def _save_password(path: str, password: str) -> None:
+    password_file_path = os.path.join(path, gloutils.PASSWORD_FILENAME)
+    password_file = open(password_file_path, "w+")
+    password_file.write(_hash_password(password))
+    password_file.close()
+
+
+def _read_password(path: str) -> str:
+    password_file_path = os.path.join(path, gloutils.PASSWORD_FILENAME)
+    password_file = open(password_file_path, "r+")
+    password = password_file.read()
+    password_file.close()
+    return password
+
+
+def _hash_password(password: str) -> str:
+    gfg = hashlib.sha3_512()
+    gfg.update(password.encode('utf-8'))
+    return gfg.hexdigest()
 
 
 def _main() -> int:
