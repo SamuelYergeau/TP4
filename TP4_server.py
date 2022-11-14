@@ -11,11 +11,11 @@ import hashlib
 import hmac
 import json
 import os
-import pathlib
 import select
 import smtplib
 import socket
 import sys
+import re
 
 import glosocket
 import gloutils
@@ -41,8 +41,14 @@ class Server:
         print(f"DEBUGGING : server socket : {self._server_socket}")
         self._client_socs: list[socket.socket] = []
         self._logged_users = {}
-        server_data_dir: pathlib.Path = pathlib.Path(gloutils.SERVER_DATA_DIR)
-        server_lost_dir: pathlib.Path = pathlib.Path(os.path.join(server_data_dir, gloutils.SERVER_LOST_DIR))
+        if not os.path.exists(gloutils.SERVER_DATA_DIR):
+            os.makedirs(gloutils.SERVER_DATA_DIR)
+        server_lost_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, gloutils.SERVER_LOST_DIR)
+        if not os.path.exists(server_lost_dir_path):
+            os.makedirs(server_lost_dir_path)
+        while True :
+            select.select(_accept_client(self))
+            
 
     def cleanup(self) -> None:
         """Ferme toutes les connexions résiduelles."""
@@ -86,6 +92,32 @@ class Server:
         # TODO : ajouter validation des identifiants
         # TODO : créer le dossier de l'utilisateur
         # TODO : associer le socket au nouvel utilisateur
+        username = payload['username']
+        password = payload['password']
+        # Vérifier le string nom utilisateur
+        if re.search(r"[^._-\w]", username) is not None:
+            errorPayload = ErrorPayload(error_message="le nom d’utilisateur contient des caractères autres que alphanumériques,_, . ou -.")
+            return gloutils.GloMessage(header= gloutils.Headers.ERROR, payload=errorPayload)
+        #Vérifier que le dossier n'existe pas ou le créer
+        user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
+        if os.path.exists(user_dir_path) :
+            errorPayload = ErrorPayload(error_message="ce nom d'utilisateur existe déjà")
+            return gloutils.GloMessage(header= gloutils.Headers.ERROR, payload=errorPayload)
+        else :
+            os.makedirs(user_dir_path)
+        #Vérifier le mot de passe
+        if len(password)<10 or re.search(r"[a-z]+[A-Z]+[0-9]+", password) is None :
+            errorPayload = ErrorPayload(error_message="le mot de passe a moins de 10 caractères et/ou ne contient pas au moins une majuscule, une minuscule et un chiffre")
+            return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload = errorPayload)
+        #Hacher et sauvegarder le mot de passe
+        password_file_path = os.path.join(user_dir_path, gloutils.PASSWORD_FILENAME)
+        password_file = open(password_file_path, "w+")
+        gfg = hashlib.sha3_512()
+        gfg.update(password)
+        password_file.write(gfg.digest())
+        password_file.close()
+        #Associer le socket au nouvel utilisateur
+        self._logged_users.add[client_soc]=username
         return gloutils.GloMessage(header=gloutils.Headers.OK)
 
     def _login(self, client_soc: socket.socket, payload: gloutils.AuthPayload
@@ -97,7 +129,27 @@ class Server:
         retourne un succès, sinon retourne un message d'erreur.
         """
         print(f"DEBUGGING : login for payload : {payload}")
-        return gloutils.GloMessage()
+        username = payload['username']
+        password = payload['password']
+        #S'assurer que l'utilisateur existe
+        user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
+        if  not os.path.exists(user_dir_path) :
+            errorPayload = ErrorPayload(error_message="cet utilisateur n'existe pas")
+            return gloutils.GloMessage(header= gloutils.Headers.ERROR, payload=errorPayload)
+        #Hacher le mot de passe et le vérifier
+        password_file_path = os.path.join(user_dir_path, gloutils.PASSWORD_FILENAME)
+        password_file = open(password_file_path, "r+")
+        hash_password = password_file.read()
+        password_file.close()  
+        gfg = hashlib.sha3_512()
+        gfg.update(password)
+        if not gfg.digest() == hash_password :
+            errorPayload = ErrorPayload(error_message="mauvais mot de passe")
+            return gloutils.GloMessage(header= gloutils.Headers.ERROR, payload=errorPayload)
+        self._logged_users.add[client_soc]=username
+        successPayload = gloutils.AuthPayload(username=username, password=password)
+        return gloutils.GloMessage(header=gloutils.Headers.OK, payload=payload)
+
 
     def _logout(self, client_soc: socket.socket) -> None:
         """Déconnecte un utilisateur."""
@@ -148,6 +200,8 @@ class Server:
         Retourne un messange indiquant le succès ou l'échec de l'opération.
         """
         print(f"DEBUGGING : send email for payload {payload}")
+        
+        
         return gloutils.GloMessage()
 
     def run(self):
