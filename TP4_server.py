@@ -23,7 +23,6 @@ import gloutils
 
 class Server:
     """Serveur mail @glo2000.ca."""
-
     def __init__(self) -> None:
         """
         Prépare le socket du serveur `_server_socket`
@@ -36,17 +35,15 @@ class Server:
 
         S'assure que les dossiers de données du serveur existent.
         """
-
         self._server_socket = self._make_server_socket("127.0.0.1", gloutils.APP_PORT)
-        print(f"DEBUGGING : server socket : {self._server_socket}")
         self._client_socs: list[socket.socket] = []
         self._logged_users = {}
+
         if not os.path.exists(gloutils.SERVER_DATA_DIR):
             os.makedirs(gloutils.SERVER_DATA_DIR)
         server_lost_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, gloutils.SERVER_LOST_DIR)
         if not os.path.exists(server_lost_dir_path):
             os.makedirs(server_lost_dir_path)
-            
 
     def cleanup(self) -> None:
         """Ferme toutes les connexions résiduelles."""
@@ -74,7 +71,8 @@ class Server:
 
     def _remove_client(self, client_soc: socket.socket) -> None:
         """Retire le client des structures de données et ferme sa connexion."""
-        self._client_socs.remove(client_soc)
+        self._logout(client_soc)
+        client_soc.close()
 
     def _create_account(self, client_soc: socket.socket,
                         payload: gloutils.AuthPayload
@@ -135,7 +133,7 @@ class Server:
     def _logout(self, client_soc: socket.socket) -> None:
         """Déconnecte un utilisateur."""
         print(f"DEBUGGING : logging out user - disconnection socket {client_soc}")
-        client_soc.close()
+        self._client_socs.remove(client_soc)
 
     def _get_email_list(self, client_soc: socket.socket
                         ) -> gloutils.GloMessage:
@@ -147,7 +145,7 @@ class Server:
         Une absence de courriel n'est pas une erreur, mais une liste vide.
         """
         print(f"DEBUGGING : get email list")
-        return gloutils.GloMessage()
+        return _error_message("functionnality was not yet implemented.")
 
     def _get_email(self, client_soc: socket.socket,
                    payload: gloutils.EmailChoicePayload
@@ -157,7 +155,7 @@ class Server:
         au socket.
         """
         print(f"DEBUGGING : get email for payload : {payload}")
-        return gloutils.GloMessage()
+        return _error_message("functionnality was not yet implemented.")
 
     def _get_stats(self, client_soc: socket.socket) -> gloutils.GloMessage:
         """
@@ -165,7 +163,7 @@ class Server:
         de l'utilisateur associé au socket.
         """
         print(f"DEBUGGING : get stats")
-        return gloutils.GloMessage()
+        return _error_message("functionnality was not yet implemented.")
 
     def _send_email(self, payload: gloutils.EmailContentPayload
                     ) -> gloutils.GloMessage:
@@ -181,9 +179,7 @@ class Server:
         Retourne un messange indiquant le succès ou l'échec de l'opération.
         """
         print(f"DEBUGGING : send email for payload {payload}")
-        
-        
-        return gloutils.GloMessage()
+        return _error_message("functionnality was not yet implemented.")
 
     def run(self):
         """Point d'entrée du serveur."""
