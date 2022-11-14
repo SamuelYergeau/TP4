@@ -97,7 +97,7 @@ class Client:
         S'il n'y a pas de courriel à lire, l'utilisateur est averti avant de
         retourner au menu principal.
         """
-        response = self._send_receive(gloutils.Headers.INBOX_READING_REQUEST)
+        response = self._ask_server(gloutils.Headers.INBOX_READING_REQUEST)
         if response["header"] == gloutils.Headers.OK:
             response_payload = response["payload"]
             emails = gloutils.EmailListPayload(email_list=response_payload["email_list"])
@@ -109,7 +109,7 @@ class Client:
             choice = self._get_inbox_reading_choice(emails["email_list"])
             self._read_selected_email(choice)
         else:
-            print(response.payload)
+            print(response["payload"])
 
     def _get_inbox_reading_choice(self, emails: list[str]) -> int:
         """
@@ -181,7 +181,7 @@ class Client:
 
         Affiche les statistiques à l'aide du gabarit `STATS_DISPLAY`.
         """
-        response = self._send_receive(gloutils.Headers.STATS_REQUEST)
+        response = self._ask_server(gloutils.Headers.STATS_REQUEST)
 
         if response["header"] == gloutils.Headers.OK:
             stats = _payload_to_stats(response["payload"])
@@ -205,6 +205,17 @@ class Client:
         TODO : I guess some verifications or something
         """
         self._send(header, payload)
+        response = glosocket.recv_msg(self._socket)
+        print(f"DEBUGGING : response message : {response}")
+
+        return json.loads(response)
+
+    def _ask_server(self, header):
+        message = gloutils.GloMessage(
+            header=header
+        )
+
+        glosocket.send_msg(self._socket, json.dumps(message))
         response = glosocket.recv_msg(self._socket)
         print(f"DEBUGGING : response message : {response}")
 
