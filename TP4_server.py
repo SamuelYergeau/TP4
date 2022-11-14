@@ -144,9 +144,40 @@ class Server:
 
         Une absence de courriel n'est pas une erreur, mais une liste vide.
         """
-        print(f"DEBUGGING : get email list")
-        return _error_message("functionnality was not yet implemented.")
-
+        username = self._logged_users[client_soc]
+        email_list = _get_sorted_email_list(username)
+        subject_display_list = []
+        for k in range (len(email_list)) :
+            data = email_list[k]
+            subject_display_list.append(gloutils.SUBJECT_DISPLAY(
+                number = k + 1,
+                sender = data['sender'],
+                subject = data['subject'],
+                date = data['date']
+                ))
+        email_list_payload = gloutils.EmailListPayload(subject_display_list)
+        return gloutils.GloMessage(header=gloutils.Headers.OK, 
+                                   payload = email_list_payload )
+    
+    def _get_sorted_email_list(username:str) -> list :
+        """
+        Retourne la liste triée par date des emails en format json présents 
+        dans le dossier utilisateur
+        """
+        user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
+        user_emails = os.listdir(user_dir_path)
+        email_data_list = []
+        for email_file in user_emails :
+            email = open(email_file)
+            email_data = json.load(email)
+            email_data_list.append(email_data)
+            email.close()
+        emails_sorted_list = sorted(email_content_list, 
+                                    key = lambda data : data['date'], 
+                                    reverse=True )
+        subject_display_list = []
+        return emails_sorted_list
+    
     def _get_email(self, client_soc: socket.socket,
                    payload: gloutils.EmailChoicePayload
                    ) -> gloutils.GloMessage:
@@ -154,8 +185,17 @@ class Server:
         Récupère le contenu de l'email dans le dossier de l'utilisateur associé
         au socket.
         """
-        print(f"DEBUGGING : get email for payload : {payload}")
-        return _error_message("functionnality was not yet implemented.")
+        username = self._logged_users[client_soc]
+        choice = payload['choice']
+        email = _get_sorted_email_list(username)[choice-1]
+        email_content_payload = gloutils.EmailContentPayload(
+            sender = email['sender'],
+            destination = email['destination'],
+            subject = email['subject'],
+            date = email['date'],
+            content = email['content']
+        )
+        return gloutils.GloMessage(header=gloutils.Headers.OK, payload = email_content_payload )
 
     def _get_stats(self, client_soc: socket.socket) -> gloutils.GloMessage:
         """
@@ -247,7 +287,7 @@ def _is_password_valid(password: str) -> bool:
     vérifies que le mot de passe a moins de 10 caractères et
     contient au moins une majuscule, une minuscule et un chiffre
     """
-    return len(password) >= 10 or re.search(r"(?=0-9)(?=a-z)(?=A-Z)", password) is not None
+    return len(password) >= 10 and re.search(r"(?=0-9)(?=a-z)(?=A-Z)", password) is not None
 
 
 def _save_password(path: str, password: str) -> None:
