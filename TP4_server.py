@@ -124,8 +124,7 @@ class Server:
             return _error_message("mauvais mot de passe")
 
         self._link_socket_to_user(client_soc, username)
-        payload = gloutils.AuthPayload(username=username, password=password)
-        return gloutils.GloMessage(header=gloutils.Headers.OK, payload=payload)
+        return _success_message(gloutils.AuthPayload(username=username, password=password))
 
     def _link_socket_to_user(self, client_soc: socket.socket, username: str) -> None:
         self._logged_users[client_soc] = username
@@ -143,39 +142,43 @@ class Server:
         SUBJECT_DISPLAY et sont ordonnés du plus récent au plus ancien.
 
         Une absence de courriel n'est pas une erreur, mais une liste vide.
+        TODO : fix : when the client just sent an email, for some reason they crash if we try to read emails right after
         """
         username = self._logged_users[client_soc]
-        email_list = _get_sorted_email_list(username)
+        email_list = self._get_sorted_email_list(username)
         subject_display_list = []
-        for k in range (len(email_list)) :
-            data = email_list[k]
-            subject_display_list.append(gloutils.SUBJECT_DISPLAY(
-                number = k + 1,
-                sender = data['sender'],
-                subject = data['subject'],
-                date = data['date']
-                ))
-        email_list_payload = gloutils.EmailListPayload(subject_display_list)
-        return gloutils.GloMessage(header=gloutils.Headers.OK, 
-                                   payload = email_list_payload )
-    
-    def _get_sorted_email_list(username:str) -> list :
+
+        for i, data in enumerate(email_list, start=1):
+            subject = gloutils.SUBJECT_DISPLAY.format(
+                number=i,
+                sender=data["sender"],
+                subject=data["subject"],
+                date=data["date"]
+            )
+            subject_display_list.append(subject)
+
+        return _success_message(gloutils.EmailListPayload(email_list=subject_display_list))
+
+    def _get_sorted_email_list(self, username: str) -> list:
         """
         Retourne la liste triée par date des emails en format json présents 
         dans le dossier utilisateur
         """
         user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
         user_emails = os.listdir(user_dir_path)
+        user_emails.remove("pass")
         email_data_list = []
-        for email_file in user_emails :
-            email = open(email_file)
-            email_data = json.load(email)
+
+        for email_file in user_emails:
+            file_path = os.path.join(user_dir_path, email_file)
+            email_file = open(file_path, encoding='utf-8')
+            email_data = json.load(email_file)
             email_data_list.append(email_data)
-            email.close()
-        emails_sorted_list = sorted(email_content_list, 
-                                    key = lambda data : data['date'], 
-                                    reverse=True )
-        subject_display_list = []
+            email_file.close()
+
+        emails_sorted_list = sorted(email_data_list,
+                                    key=lambda data: data['date'],
+                                    reverse=True)
         return emails_sorted_list
     
     def _get_email(self, client_soc: socket.socket,
@@ -186,16 +189,10 @@ class Server:
         au socket.
         """
         username = self._logged_users[client_soc]
-        choice = payload['choice']
-        email = _get_sorted_email_list(username)[choice-1]
-        email_content_payload = gloutils.EmailContentPayload(
-            sender = email['sender'],
-            destination = email['destination'],
-            subject = email['subject'],
-            date = email['date'],
-            content = email['content']
-        )
-        return gloutils.GloMessage(header=gloutils.Headers.OK, payload = email_content_payload )
+        choice = int(payload['choice'])
+        email = self._get_sorted_email_list(username)[choice-1]
+
+        return gloutils.GloMessage(header=gloutils.Headers.OK, payload=_email_content_payload(email))
 
     def _get_stats(self, client_soc: socket.socket) -> gloutils.GloMessage:
         """
@@ -219,7 +216,20 @@ class Server:
         Retourne un messange indiquant le succès ou l'échec de l'opération.
         """
         print(f"DEBUGGING : send email for payload {payload}")
+        # TODO : déterminer si envoit est interne ou externe
+        # TODO : all the checks and stuff
+
+        dir_path = os.path.join(gloutils.SERVER_DATA_DIR, payload["destination"].upper())
+        if os.path.exists(dir_path):
+            file_path = os.path.join(dir_path, payload["subject"])
+            _save(file_path, json.dumps(payload))
+            return gloutils.GloMessage(header=gloutils.Headers.OK)
+
+        dir_path = os.path.join(gloutils.SERVER_DATA_DIR, gloutils.SERVER_LOST_DIR)
+        file_path = os.path.join(dir_path, payload["subject"])
+        _save(file_path, str(payload))
         return _error_message("functionnality was not yet implemented.")
+
 
     def run(self):
         """Point d'entrée du serveur."""
@@ -252,7 +262,7 @@ class Server:
             case {"header": gloutils.Headers.INBOX_READING_REQUEST}:
                 self._send(client_socket, self._get_email_list(client_socket))
             case {"header": gloutils.Headers.INBOX_READING_CHOICE, "payload": payload}:
-                self._send(client_socket, self._get_email(payload))
+                self._send(client_socket, self._get_email(client_socket, payload))
             case {"header": gloutils.Headers.EMAIL_SENDING, "payload": payload}:
                 self._send(client_socket, self._send_email(payload))
             case {"header": gloutils.Headers.STATS_REQUEST}:
@@ -271,6 +281,20 @@ class Server:
 def _error_message(message: str) -> gloutils.GloMessage:
     errorPayload = gloutils.ErrorPayload(error_message=message)
     return gloutils.GloMessage(header=gloutils.Headers.ERROR, payload=errorPayload)
+
+
+def _success_message(payload) -> gloutils.GloMessage:
+    return gloutils.GloMessage(header=gloutils.Headers.OK, payload=payload)
+
+
+def _email_content_payload(email) -> gloutils.EmailContentPayload:
+    return gloutils.EmailContentPayload(
+        sender=email['sender'],
+        destination=email['destination'],
+        subject=email['subject'],
+        date=email['date'],
+        content=email['content']
+    )
 
 
 def _is_username_valid(username: str) -> bool:
@@ -292,9 +316,7 @@ def _is_password_valid(password: str) -> bool:
 
 def _save_password(path: str, password: str) -> None:
     password_file_path = os.path.join(path, gloutils.PASSWORD_FILENAME)
-    password_file = open(password_file_path, "w+")
-    password_file.write(_hash_password(password))
-    password_file.close()
+    _save(password_file_path, _hash_password(password))
 
 
 def _read_password(path: str) -> str:
@@ -309,6 +331,12 @@ def _hash_password(password: str) -> str:
     gfg = hashlib.sha3_512()
     gfg.update(password.encode('utf-8'))
     return gfg.hexdigest()
+
+
+def _save(path: str, data: str) -> None:
+    file = open(path, "w+")
+    file.write(data)
+    file.close()
 
 
 def _main() -> int:
