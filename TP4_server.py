@@ -206,7 +206,7 @@ class Server:
         if list_emails is None :
             nb_emails = 0
         else : 
-            nb_emails = list_emails
+            nb_emails = len(list_emails)
         user_dir_size = 0
         for (current_dir, sousDossiers, files) in os.walk(user_dir):
             user_dir_size += sum( os.path.getsize( os.path.join(current_dir, file) ) for file in files )
