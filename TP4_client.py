@@ -102,7 +102,7 @@ class Client:
             response_payload = response["payload"]
             emails = gloutils.EmailListPayload(email_list=response_payload["email_list"])
 
-            if len(emails.email_list) == 0:
+            if len(emails["email_list"]) == 0:
                 print("there is no emails in your inbox")
                 return
 
@@ -116,17 +116,17 @@ class Client:
         shows the list of emails to the user and asks them what email they want to read
         """
         print("Emails in inbox")
-        for id, email in enumerate(emails):
-            print(f"{id} : {email}")
+        for email in emails:
+            print(f"{email}")
 
-        choice = input("enter the number of the email you would like to consult")
+        choice = input("enter the number of the email you would like to consult\n")
         return choice  # TODO : ajouter vérificaton que c'est bien dans la liste
 
     def _read_selected_email(self, email_id: int) -> None:
         """
         get the selected email from the server and displays it
         """
-        payload = gloutils.EmailChoicePayload(email_id)
+        payload = gloutils.EmailChoicePayload(choice=email_id)
         response = self._send_receive(gloutils.Headers.INBOX_READING_CHOICE, payload)
 
         if response["header"] == gloutils.Headers.OK:
@@ -292,7 +292,7 @@ def _email_content(email: str) -> gloutils.EmailContentPayload:
 
 
 def _email_display(email: gloutils.EmailContentPayload) -> str:
-    return gloutils.EMAIL_DISPLAY(
+    return gloutils.EMAIL_DISPLAY.format(
         sender=email["sender"],
         to=email["destination"],
         subject=email["subject"],
@@ -302,7 +302,7 @@ def _email_display(email: gloutils.EmailContentPayload) -> str:
 
 
 def _stats_display(stats: gloutils.StatsPayload) -> str:
-    return gloutils.STATS_DISPLAY(
+    return gloutils.STATS_DISPLAY.format(
         count=stats["count"],
         size=stats["size"]
     )
