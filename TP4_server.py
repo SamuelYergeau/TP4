@@ -166,7 +166,7 @@ class Server:
         """
         user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
         user_emails = os.listdir(user_dir_path)
-        user_emails.remove("pass")
+        user_emails.remove(gloutils.PASSWORD_FILENAME)
         email_data_list = []
 
         for email_file in user_emails:
@@ -200,6 +200,22 @@ class Server:
         de l'utilisateur associé au socket.
         """
         print(f"DEBUGGING : get stats")
+        username = self._logged_users[client_soc]
+        user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
+        list_emails = os.listdir(user_dir).remove(gloutils.PASSWORD_FILENAME)
+        if list_emails is None :
+            nb_emails = 0
+        else : 
+            nb_emails = list_emails
+        user_dir_size = 0
+        for (current_dir, sousDossiers, files) in os.walk(user_dir):
+            user_dir_size += sum( os.path.getsize( os.path.join(current_dir, file) ) for file in files )
+        user_dir_size /= 1024
+        user_dir_size = f'{user_dir_size} Ko'
+        stat_payload = gloutils.EmailChoicePayload(count = nb_emails, size = user_dir_size)
+        return gloutils.GloMessage(header=gloutils.Headers.OK, payload = stat_payload)
+        
+        
         return _error_message("functionnality was not yet implemented.")
 
     def _send_email(self, payload: gloutils.EmailContentPayload
@@ -311,7 +327,7 @@ def _is_password_valid(password: str) -> bool:
     vérifies que le mot de passe a moins de 10 caractères et
     contient au moins une majuscule, une minuscule et un chiffre
     """
-    return len(password) >= 10 and re.search(r"(?=0-9)(?=a-z)(?=A-Z)", password) is not None
+    return len(password) >= 10 and re.search(r"(0-9)?(a-z)?(A-Z)?", password) is not None
 
 
 def _save_password(path: str, password: str) -> None:
