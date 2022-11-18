@@ -20,6 +20,7 @@ import re
 import glosocket
 import gloutils
 
+SCALES = ["", "K", "M", "G", "T", "P", "E", "Z", "Y", "Br"]
 
 class Server:
     """Serveur mail @glo2000.ca."""
@@ -133,6 +134,7 @@ class Server:
         """Déconnecte un utilisateur."""
         print(f"DEBUGGING : logging out user - disconnection socket {client_soc}")
         self._client_socs.remove(client_soc)
+        del self._logged_users[client_soc]
 
     def _get_email_list(self, client_soc: socket.socket
                         ) -> gloutils.GloMessage:
@@ -192,7 +194,7 @@ class Server:
         choice = int(payload['choice'])
         email = self._get_sorted_email_list(username)[choice-1]
 
-        return gloutils.GloMessage(header=gloutils.Headers.OK, payload=_email_content_payload(email))
+        return _success_message(_email_content_payload(email))
 
     def _get_stats(self, client_soc: socket.socket) -> gloutils.GloMessage:
         """
@@ -202,21 +204,22 @@ class Server:
         print(f"DEBUGGING : get stats")
         username = self._logged_users[client_soc]
         user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
-        list_emails = os.listdir(user_dir).remove(gloutils.PASSWORD_FILENAME)
-        if list_emails is None :
+        list_emails = os.listdir(user_dir)
+        list_emails.remove(gloutils.PASSWORD_FILENAME)
+
+        if list_emails is None:
             nb_emails = 0
         else : 
-            nb_emails = list_emails
+            nb_emails = len(list_emails)
+
         user_dir_size = 0
         for (current_dir, sousDossiers, files) in os.walk(user_dir):
-            user_dir_size += sum( os.path.getsize( os.path.join(current_dir, file) ) for file in files )
-        user_dir_size /= 1024
-        user_dir_size = f'{user_dir_size} Ko'
-        stat_payload = gloutils.EmailChoicePayload(count = nb_emails, size = user_dir_size)
-        return gloutils.GloMessage(header=gloutils.Headers.OK, payload = stat_payload)
-        
-        
-        return _error_message("functionnality was not yet implemented.")
+            user_dir_size += sum(os.path.getsize(os.path.join(current_dir, file)) for file in files)
+
+        formatted_user_dir_size = _format_size(user_dir_size, SCALES[0])
+
+        stat_payload = gloutils.EmailChoicePayload(count=nb_emails, size=formatted_user_dir_size)
+        return _success_message(stat_payload)
 
     def _send_email(self, payload: gloutils.EmailContentPayload
                     ) -> gloutils.GloMessage:
@@ -234,6 +237,24 @@ class Server:
         print(f"DEBUGGING : send email for payload {payload}")
         # TODO : déterminer si envoit est interne ou externe
         # TODO : all the checks and stuff
+        # TODO : write the email in the user's folder
+        if re.search(r"@ulaval.ca?", payload["destination"]):
+            message = EmailMessage()
+            message["From"] = payload["sender"]
+            message["To"] = payload["destination"]
+            message["Subject"] = payload["subject"]
+            message["Date"] = payload["date"]
+            message.set_content(payload["content"])
+
+            context = ssl.create_default_context()
+            try:
+                with smtplib.SMTP(host=gloutils.SMTP_SERVER, port=gloutils.APP_PORT) as connection:
+                    connection.send_message(message)
+                    return gloutils.GloMessage(header=gloutils.Headers.OK)
+            except smtplib.SMTPException:
+                return _error_message("Le message n'a pas pu être envoyé.")
+            except socket.timeout:
+                return _error_message("Le serveur SMTP est injoinable.")
 
         dir_path = os.path.join(gloutils.SERVER_DATA_DIR, payload["destination"].upper())
         if os.path.exists(dir_path):
@@ -262,7 +283,6 @@ class Server:
     def _process_client(self, client_socket: socket.socket):
         try:
             message = glosocket.recv_msg(client_socket)
-            print(f"DEBUGGING : message received : {message}")
         except glosocket.GLOSocketError as e:
             print(f"an exeption occured : {e}")
             self._remove_client(client_socket)
@@ -319,7 +339,7 @@ def _is_username_valid(username: str) -> bool:
     caractères autres que alphanumériques,_, . ou -.
     TODO : figure out how to make the check search for -. instead of bot - and .
     """
-    return re.search(r"[^\w_.-.]", username) is None
+    return re.search(r"[^a-zA-Z0-9_\-\.]", username) is None
 
 
 def _is_password_valid(password: str) -> bool:
@@ -353,6 +373,23 @@ def _save(path: str, data: str) -> None:
     file = open(path, "w+")
     file.write(data)
     file.close()
+
+
+def _format_size(value: int, scale: str) -> str:
+    if scale == SCALES[-1]:
+        return f"{value}{scale}"
+
+    if value >= 1024:
+        current_scale_index = SCALES.index(scale)
+        next_scale = SCALES[current_scale_index + 1]
+
+        new_value = value/1024
+        if new_value >= 1024:
+            return _format_size(new_value, next_scale)
+
+        return f"{new_value}{next_scale}"
+
+    return f"{value}{scale}"
 
 
 def _main() -> int:

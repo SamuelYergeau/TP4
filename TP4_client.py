@@ -155,7 +155,7 @@ class Client:
         dest, sub, body = self._get_email_infos()
 
         return gloutils.EmailContentPayload(
-            sender=f"{self._username}.{gloutils.SERVER_DOMAIN}",
+            sender=f"{self._username}@{gloutils.SERVER_DOMAIN}",
             destination=dest,
             subject=sub,
             date=gloutils.get_current_utc_time(),
