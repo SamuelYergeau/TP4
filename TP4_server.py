@@ -20,6 +20,7 @@ import re
 import glosocket
 import gloutils
 
+SCALES = ["", "K", "M", "G", "T", "P", "E", "Z", "Y", "Br"]
 
 class Server:
     """Serveur mail @glo2000.ca."""
@@ -202,21 +203,22 @@ class Server:
         print(f"DEBUGGING : get stats")
         username = self._logged_users[client_soc]
         user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
-        list_emails = os.listdir(user_dir).remove(gloutils.PASSWORD_FILENAME)
-        if list_emails is None :
+        list_emails = os.listdir(user_dir)
+        list_emails.remove(gloutils.PASSWORD_FILENAME)
+
+        if list_emails is None:
             nb_emails = 0
-        else : 
+        else:
             nb_emails = len(list_emails)
+
         user_dir_size = 0
         for (current_dir, sousDossiers, files) in os.walk(user_dir):
-            user_dir_size += sum( os.path.getsize( os.path.join(current_dir, file) ) for file in files )
-        user_dir_size /= 1024
-        user_dir_size = f'{user_dir_size} Ko'
-        stat_payload = gloutils.EmailChoicePayload(count = nb_emails, size = user_dir_size)
-        return gloutils.GloMessage(header=gloutils.Headers.OK, payload = stat_payload)
-        
-        
-        return _error_message("functionnality was not yet implemented.")
+            user_dir_size += sum(os.path.getsize(os.path.join(current_dir, file)) for file in files)
+
+        formatted_user_dir_size = _format_size(user_dir_size, SCALES[0])
+
+        stat_payload = gloutils.EmailChoicePayload(count=nb_emails, size=formatted_user_dir_size)
+        return gloutils.GloMessage(header=gloutils.Headers.OK, payload=stat_payload)
 
     def _send_email(self, payload: gloutils.EmailContentPayload
                     ) -> gloutils.GloMessage:
@@ -353,6 +355,23 @@ def _save(path: str, data: str) -> None:
     file = open(path, "w+")
     file.write(data)
     file.close()
+
+
+def _format_size(value: int, scale: str) -> str:
+    if scale == SCALES[-1]:
+        return f"{value}{scale}"
+
+    if value >= 1024:
+        current_scale_index = SCALES.index(scale)
+        next_scale = SCALES[current_scale_index + 1]
+
+        new_value = value/1024
+        if new_value >= 1024:
+            return _format_size(new_value, next_scale)
+
+        return f"{new_value}{next_scale}"
+
+    return f"{value}{scale}"
 
 
 def _main() -> int:
