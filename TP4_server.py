@@ -85,7 +85,6 @@ class Server:
         associe le socket au nouvel l'utilisateur et retourne un succès,
         sinon retourne un message d'erreur.
         """
-        print(f"DEBUGGING : creating a new account with payload : {payload}")
         username = payload['username']
         password = payload['password']
         user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
@@ -111,7 +110,6 @@ class Server:
         Si les identifiants sont valides, associe le socket à l'utilisateur et
         retourne un succès, sinon retourne un message d'erreur.
         """
-        print(f"DEBUGGING : login for payload : {payload}")
         username = payload['username']
         password = payload['password']
         user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
@@ -132,7 +130,6 @@ class Server:
 
     def _logout(self, client_soc: socket.socket) -> None:
         """Déconnecte un utilisateur."""
-        print(f"DEBUGGING : logging out user - disconnection socket {client_soc}")
         self._client_socs.remove(client_soc)
         del self._logged_users[client_soc]
 
@@ -201,7 +198,6 @@ class Server:
         Récupère le nombre de courriels et la taille du dossier et des fichiers
         de l'utilisateur associé au socket.
         """
-        print(f"DEBUGGING : get stats")
         username = self._logged_users[client_soc]
         user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
         list_emails = os.listdir(user_dir)
@@ -234,8 +230,6 @@ class Server:
 
         Retourne un messange indiquant le succès ou l'échec de l'opération.
         """
-        print(f"DEBUGGING : send email for payload {payload}")
-        # TODO : déterminer si envoit est interne ou externe
         # TODO : all the checks and stuff
         # TODO : write the email in the user's folder
         if re.search(r"@ulaval.ca?", payload["destination"]):
