@@ -25,7 +25,7 @@ class Client:
         Prépare un attribut `_username` pour stocker le nom d'utilisateur
         courant. Laissé vide quand l'utilisateur n'est pas connecté.
         """
-        self._socket = self._make_client_socket("127.0.0.1", gloutils.APP_PORT)
+        self._socket = self._make_client_socket(destination, gloutils.APP_PORT)
         self._username = None
 
     def _make_client_socket(self, destination: str, port: int) -> socket.socket:
