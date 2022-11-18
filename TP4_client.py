@@ -1,7 +1,7 @@
 """\
 GLO-2000 Travail pratique 4 - Client
 Noms et numéros étudiants:
--
+- Samuel Yergeau 111 266 125
 -
 -
 """
