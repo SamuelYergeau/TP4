@@ -143,7 +143,6 @@ class Server:
         SUBJECT_DISPLAY et sont ordonnés du plus récent au plus ancien.
 
         Une absence de courriel n'est pas une erreur, mais une liste vide.
-        TODO : fix : when the client just sent an email, for some reason they crash if we try to read emails right after
         """
         username = self._logged_users[client_soc]
         email_list = self._get_sorted_email_list(username)
@@ -335,7 +334,6 @@ def _is_username_valid(username: str) -> bool:
     """
     vérifies que le nom d'utilisateur ne contient pas des
     caractères autres que alphanumériques,_, . ou -.
-    TODO : figure out how to make the check search for -. instead of bot - and .
     """
     return re.search(r"[^\w_.-.]", username) is None
 
