@@ -10,6 +10,7 @@ import argparse
 import json
 import socket
 import sys
+import re
 from getpass import getpass
 
 import glosocket
@@ -143,10 +144,6 @@ class Client:
             print(f"\n'{choice}' ne correspond pas au numéro d'un courriel listé.")
             return self._get_inbox_reading_choice(emails)
 
-        if choice not in range(1, len(emails)):
-            print(f"\n'{choice}' ne correspond pas au numéro d'un courriel listé.")
-            return self._get_inbox_reading_choice(emails)
-
         return choice
 
     def _send_email(self) -> None:
@@ -199,9 +196,9 @@ class Client:
                 break
 
         body = '\n'.join(lines)
-        body = body.encode("utf-8")
+        body = body.encode('utf-8')
 
-        return dest, subject, body
+        return dest, subject, str(body)
 
     def _check_stats(self) -> None:
         """
@@ -265,6 +262,9 @@ class Client:
         while not should_quit:
             if not self._username:
                 action = input(f"\n{gloutils.CLIENT_AUTH_CHOICE}\n")
+                if re.search(r"[^0-9]", action) is not None:
+                    print(f"\n'{action}' n'est pas un nombre.")
+                    continue
 
                 match int(action):
                     case 1:
@@ -278,6 +278,9 @@ class Client:
                         print("La valeur entrée ne corresponds pas à une des options listées")
             else:
                 action = input(f"\n{gloutils.CLIENT_USE_CHOICE}\n")
+                if re.search(r"[^0-9]", action) is not None:
+                    print(f"\n'{action}' n'est pas un nombre.")
+                    continue
 
                 match int(action):
                     case 1:

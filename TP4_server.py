@@ -87,7 +87,6 @@ class Server:
         associe le socket au nouvel l'utilisateur et retourne un succès,
         sinon retourne un message d'erreur.
         """
-        print(f"DEBUGGING : creating a new account with payload : {payload}")
         username = payload['username']
         password = payload['password']
         user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
@@ -200,7 +199,6 @@ class Server:
         Récupère le nombre de courriels et la taille du dossier et des fichiers
         de l'utilisateur associé au socket.
         """
-        print(f"DEBUGGING : get stats")
         username = self._logged_users[client_soc]
         user_dir = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
         list_emails = os.listdir(user_dir)
@@ -232,9 +230,6 @@ class Server:
 
         Retourne un messange indiquant le succès ou l'échec de l'opération.
         """
-        print(f"DEBUGGING : send email for payload {payload}")
-        # TODO : déterminer si envoit est interne ou externe
-        # TODO : all the checks and stuff
 
         if re.search(r"@ulaval.ca?", payload["destination"]):
             return self._handle_external_email(payload)
@@ -248,14 +243,14 @@ class Server:
         message["Subject"] = payload["subject"]
         message["Date"] = payload["date"]
         message.set_content(payload["content"])
-            try:
-                with smtplib.SMTP(host=gloutils.SMTP_SERVER, timeout=10) as connection:
-                    connection.send_message(message)
-                    return gloutils.GloMessage(header=gloutils.Headers.OK)
-            except smtplib.SMTPException:
-                return _error_message("Le message n'a pas pu être envoyé.")
-            except socket.timeout:
-                return _error_message("Le serveur SMTP est injoinable.")
+        try:
+            with smtplib.SMTP(host=gloutils.SMTP_SERVER, timeout=10) as connection:
+                connection.send_message(message)
+                return gloutils.GloMessage(header=gloutils.Headers.OK)
+        except smtplib.SMTPException:
+            return _error_message("Le message n'a pas pu être envoyé.")
+        except socket.timeout:
+            return _error_message("Le serveur SMTP est injoinable.")
 
     @staticmethod
     def _handle_internal_email(payload: gloutils.EmailContentPayload) -> gloutils.GloMessage:
@@ -285,7 +280,6 @@ class Server:
     def _process_client(self, client_socket: socket.socket):
         try:
             message = glosocket.recv_msg(client_socket)
-            print(f"DEBUGGING : message received : {message}")
         except glosocket.GLOSocketError as e:
             print(f"an exeption occured : {e}")
             self._remove_client(client_socket)
