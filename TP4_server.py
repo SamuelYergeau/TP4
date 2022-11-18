@@ -112,7 +112,6 @@ class Server:
         Si les identifiants sont valides, associe le socket à l'utilisateur et
         retourne un succès, sinon retourne un message d'erreur.
         """
-        print(f"DEBUGGING : login for payload : {payload}")
         username = payload['username']
         password = payload['password']
         user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
@@ -178,7 +177,7 @@ class Server:
 
         emails_sorted_list = sorted(email_data_list,
                                     key=lambda data: data['date'],
-                                    reverse=False)
+                                    reverse=True)
         return emails_sorted_list
     
     def _get_email(self, client_soc: socket.socket,
