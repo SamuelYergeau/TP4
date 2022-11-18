@@ -101,7 +101,7 @@ class Server:
         _save_password(user_dir_path, password)
 
         self._link_socket_to_user(client_soc, username)
-        return _success_message("Coucou")
+        return gloutils.GloMessage(header=gloutils.Headers.OK)
 
     def _login(self, client_soc: socket.socket, payload: gloutils.AuthPayload
                ) -> gloutils.GloMessage:
@@ -237,7 +237,7 @@ class Server:
         # TODO : déterminer si envoit est interne ou externe
         # TODO : all the checks and stuff
 
-        if re.search(r"@ulaval.ca?", payload["destination"]) :
+        if re.search(r"@ulaval.ca?", payload["destination"]):
             message = EmailMessage()
             message["From"] = payload["sender"]
             message["To"] = payload["destination"]
@@ -247,17 +247,17 @@ class Server:
             try:
                 with smtplib.SMTP(host=gloutils.SMTP_SERVER, timeout=10) as connection:
                     connection.send_message(message)
-                    return _success_message()
+                    return gloutils.GloMessage(header=gloutils.Headers.OK)
             except smtplib.SMTPException:
-                    return _error_message("Le message n'a pas pu être envoyé.")
+                return _error_message("Le message n'a pas pu être envoyé.")
             except socket.timeout:
-                    return _error_message("Le serveur SMTP est injoinable.")
+                return _error_message("Le serveur SMTP est injoinable.")
 
         dir_path = os.path.join(gloutils.SERVER_DATA_DIR, payload["destination"].upper())
         if os.path.exists(dir_path):
             file_path = os.path.join(dir_path, payload["subject"])
             _save(file_path, json.dumps(payload))
-            return _success_message()
+            return gloutils.GloMessage(header=gloutils.Headers.OK)
 
         dir_path = os.path.join(gloutils.SERVER_DATA_DIR, gloutils.SERVER_LOST_DIR)
         file_path = os.path.join(dir_path, payload["subject"])
