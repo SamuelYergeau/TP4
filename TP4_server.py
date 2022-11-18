@@ -100,7 +100,7 @@ class Server:
         _save_password(user_dir_path, password)
 
         self._link_socket_to_user(client_soc, username)
-        return gloutils.GloMessage(header=gloutils.Headers.OK)
+        return _success_message("Coucou")
 
     def _login(self, client_soc: socket.socket, payload: gloutils.AuthPayload
                ) -> gloutils.GloMessage:
@@ -192,7 +192,7 @@ class Server:
         choice = int(payload['choice'])
         email = self._get_sorted_email_list(username)[choice-1]
 
-        return gloutils.GloMessage(header=gloutils.Headers.OK, payload=_email_content_payload(email))
+        return _success_message(_email_content_payload(email))
 
     def _get_stats(self, client_soc: socket.socket) -> gloutils.GloMessage:
         """
@@ -206,14 +206,14 @@ class Server:
         if list_emails is None :
             nb_emails = 0
         else : 
-            nb_emails = len(list_emails)
+            nb_emails = list_emails
         user_dir_size = 0
         for (current_dir, sousDossiers, files) in os.walk(user_dir):
             user_dir_size += sum( os.path.getsize( os.path.join(current_dir, file) ) for file in files )
         user_dir_size /= 1024
         user_dir_size = f'{user_dir_size} Ko'
         stat_payload = gloutils.EmailChoicePayload(count = nb_emails, size = user_dir_size)
-        return gloutils.GloMessage(header=gloutils.Headers.OK, payload = stat_payload)
+        return _success_message(stat_payload)
         
         
         return _error_message("functionnality was not yet implemented.")
@@ -234,12 +234,28 @@ class Server:
         print(f"DEBUGGING : send email for payload {payload}")
         # TODO : déterminer si envoit est interne ou externe
         # TODO : all the checks and stuff
-
+        
+        if re.search(r"@ulaval.ca?", payload["destination"]) :
+            message = EmailMessage()
+            message["From"] = payload["sender"]
+            message["To"] = payload["destination"]
+            message["Subject"] = payload["subject"]
+            message["Date"] = payload["date"]
+            message.set_content(payload["content"])
+            try:
+                with smtplib.SMTP(host=gloutils.SMTP_SERVER, timeout=10) as connection:
+                    connection.send_message(message)
+                    return _success_message()
+            except smtplib.SMTPException:
+                    return _error_message("Le message n'a pas pu être envoyé.")
+            except socket.timeout:
+                    return _error_message("Le serveur SMTP est injoinable.")
+            
         dir_path = os.path.join(gloutils.SERVER_DATA_DIR, payload["destination"].upper())
         if os.path.exists(dir_path):
             file_path = os.path.join(dir_path, payload["subject"])
             _save(file_path, json.dumps(payload))
-            return gloutils.GloMessage(header=gloutils.Headers.OK)
+            return _success_message()
 
         dir_path = os.path.join(gloutils.SERVER_DATA_DIR, gloutils.SERVER_LOST_DIR)
         file_path = os.path.join(dir_path, payload["subject"])
