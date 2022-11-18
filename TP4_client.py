@@ -1,7 +1,7 @@
 """\
 GLO-2000 Travail pratique 4 - Client
 Noms et numéros étudiants:
--
+- Samuel Yergeau 111 266 125
 -
 -
 """
@@ -125,8 +125,7 @@ class Client:
         if self._is_response_ok(response):
             print(f"\n{_payload_to_email(response['payload'])}")
 
-    @staticmethod
-    def _get_inbox_reading_choice(emails: list[str]) -> int:
+    def _get_inbox_reading_choice(self, emails: list[str]) -> int:
         """
         shows the list of emails to the user and asks them what email they want to read
         """
@@ -135,7 +134,12 @@ class Client:
             print(f"{email}")
 
         choice = input("enter the number of the email you would like to consult\n")
-        return choice  # TODO : ajouter vérificaton que c'est bien dans la liste
+
+        if choice not in range(1, len(emails)):
+            print(f"\n'{choice}' ne correspond pas au numéro d'un courriel listé.")
+            return self._get_inbox_reading_choice(emails)
+
+        return choice
 
     def _send_email(self) -> None:
         """
@@ -170,9 +174,6 @@ class Client:
     def _get_email_infos() -> (str, str, str):
         """
         asks the user for the informations necessary for the email
-
-        TODO : checks that the body ends with a single dot on a line
-        TODO : checks on the user's adress and stuff
         """
         dest: str = input("adresse email du destinataire : ")
         subject: str = input("sujet du message : ")
@@ -204,7 +205,6 @@ class Client:
     def _send_receive(self, header, payload=None):
         """
         abstracts the encapsulation, communication and checks for errors and stuff
-        TODO : I guess some verifications or something
         """
         if payload:
             self._send(header, payload)
