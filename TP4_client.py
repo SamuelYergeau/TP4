@@ -1,7 +1,7 @@
 """\
 GLO-2000 Travail pratique 4 - Client
 Noms et numéros étudiants:
--
+- Samuel Yergeau 111 266 125
 -
 -
 """
@@ -10,6 +10,7 @@ import argparse
 import json
 import socket
 import sys
+from getpass import getpass
 
 import glosocket
 import gloutils
@@ -28,7 +29,8 @@ class Client:
         self._socket = self._make_client_socket(destination, gloutils.APP_PORT)
         self._username = None
 
-    def _make_client_socket(self, destination: str, port: int) -> socket.socket:
+    @staticmethod
+    def _make_client_socket(destination: str, port: int) -> socket.socket:
         """ setup for the client socket """
         try:
             client_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -48,10 +50,8 @@ class Client:
         payload: gloutils.AuthPayload = self._get_credentials()
         response = self._send_receive(gloutils.Headers.AUTH_REGISTER, payload)
 
-        if response["header"] == gloutils.Headers.OK:
+        if self._is_response_ok(response):
             self._username = payload["username"]
-        else:
-            print(response["payload"])
 
     def _login(self) -> None:
         """
@@ -64,14 +64,13 @@ class Client:
         payload: gloutils.AuthPayload = self._get_credentials()
         response = self._send_receive(gloutils.Headers.AUTH_LOGIN, payload)
 
-        if response["header"] == gloutils.Headers.OK:
+        if self._is_response_ok(response):
             self._username = payload["username"]
-        else:
-            print(response["payload"])
 
-    def _get_credentials(self) -> gloutils.AuthPayload:
+    @staticmethod
+    def _get_credentials() -> gloutils.AuthPayload:
         user_name = input("userName : ")
-        password = input("password : ")
+        password = getpass("password : ")
 
         return gloutils.AuthPayload(username=user_name, password=password)
 
@@ -97,25 +96,40 @@ class Client:
         S'il n'y a pas de courriel à lire, l'utilisateur est averti avant de
         retourner au menu principal.
         """
-        response = self._ask_server(gloutils.Headers.INBOX_READING_REQUEST)
-        if response["header"] == gloutils.Headers.OK:
-            response_payload = response["payload"]
-            emails = gloutils.EmailListPayload(email_list=response_payload["email_list"])
+        response = self._send_receive(gloutils.Headers.INBOX_READING_REQUEST)
+        if self._is_response_ok(response):
+            emails = self._get_email_list_from_payload(response)
+            if emails:
+                self._selected_email(emails)
 
-            if len(emails["email_list"]) == 0:
-                print("\nThere are no emails in your inbox.")
-                return
+    @staticmethod
+    def _get_email_list_from_payload(response: dict) -> list[str]:
+        response_payload = response["payload"]
+        emails = response_payload["email_list"]
 
-            choice = self._get_inbox_reading_choice(emails["email_list"])
-            self._read_selected_email(choice)
-        else:
-            print(response["payload"])
+        if len(emails) == 0:
+            print("\nthere is no emails in your inbox")
+            return None
+
+        return emails
+
+    def _selected_email(self, emails: list[str]) -> None:
+        """
+        get the selected email from the server and displays it
+        """
+        email_id = self._get_inbox_reading_choice(emails)
+
+        payload = gloutils.EmailChoicePayload(choice=email_id)
+        response = self._send_receive(gloutils.Headers.INBOX_READING_CHOICE, payload)
+
+        if self._is_response_ok(response):
+            print(f"\n{_payload_to_email(response['payload'])}")
 
     def _get_inbox_reading_choice(self, emails: list[str]) -> int:
         """
         shows the list of emails to the user and asks them what email they want to read
         """
-        print("Emails in inbox")
+        print("\nEmails in inbox")
         for email in emails:
             print(f"{email}")
 
@@ -129,18 +143,11 @@ class Client:
             print(f"\n'{choice}' ne correspond pas au numéro d'un courriel listé.")
             return self._get_inbox_reading_choice(emails)
 
-    def _read_selected_email(self, email_id: int) -> None:
-        """
-        get the selected email from the server and displays it
-        """
-        payload = gloutils.EmailChoicePayload(choice=email_id)
-        response = self._send_receive(gloutils.Headers.INBOX_READING_CHOICE, payload)
+        if choice not in range(1, len(emails)):
+            print(f"\n'{choice}' ne correspond pas au numéro d'un courriel listé.")
+            return self._get_inbox_reading_choice(emails)
 
-        if response["header"] == gloutils.Headers.OK:
-            email = _email_content(response["payload"])
-            print(_email_display(email))
-        else:
-            print(response["payload"])
+        return choice
 
     def _send_email(self) -> None:
         """
@@ -155,10 +162,12 @@ class Client:
         """
 
         payload = self._make_email_content_payload()
-        self._send(gloutils.Headers.EMAIL_SENDING, payload)
-        # TODO : handle returns in case of failure?
+        response = self._send_receive(gloutils.Headers.EMAIL_SENDING, payload)
 
-    def _make_email_content_payload(self):
+        if self._is_response_ok(response):
+            print("\nemail was sent sucessfully")
+
+    def _make_email_content_payload(self) -> gloutils.EmailContentPayload:
         dest, sub, body = self._get_email_infos()
 
         return gloutils.EmailContentPayload(
@@ -169,12 +178,10 @@ class Client:
             content=body
         )
 
-    def _get_email_infos(self) -> (str, str, str):
+    @staticmethod
+    def _get_email_infos() -> (str, str, str):
         """
         asks the user for the informations necessary for the email
-
-        TODO : checks that the body ends with a single dot on a line
-        TODO : checks on the user's adress and stuff
         """
         dest: str = input("Adresse email du destinataire : ")
         subject: str = input("Sujet du message : ")
@@ -202,13 +209,10 @@ class Client:
 
         Affiche les statistiques à l'aide du gabarit `STATS_DISPLAY`.
         """
-        response = self._ask_server(gloutils.Headers.STATS_REQUEST)
+        response = self._send_receive(gloutils.Headers.STATS_REQUEST)
 
-        if response["header"] == gloutils.Headers.OK:
-            stats = _payload_to_stats(response["payload"])
-            print(_stats_display(stats))
-        else:
-            print(response["payload"])
+        if self._is_response_ok(response):
+            print(f"\n{_payload_to_stats(response['payload'])}")
 
     def _logout(self) -> None:
         """
@@ -220,25 +224,17 @@ class Client:
         glosocket.send_msg(self._socket, json.dumps(message))
         self._username = None
 
-    def _send_receive(self, header, payload):
+    def _send_receive(self, header, payload=None):
         """
         abstracts the encapsulation, communication and checks for errors and stuff
-        TODO : I guess some verifications or something
         """
-        self._send(header, payload)
+        if payload:
+            self._send(header, payload)
+        else:
+            message = gloutils.GloMessage(header=header)
+            glosocket.send_msg(self._socket, json.dumps(message))
+
         response = glosocket.recv_msg(self._socket)
-        print(f"DEBUGGING : response message : {response}")
-
-        return json.loads(response)
-
-    def _ask_server(self, header):
-        message = gloutils.GloMessage(
-            header=header
-        )
-
-        glosocket.send_msg(self._socket, json.dumps(message))
-        response = glosocket.recv_msg(self._socket)
-        print(f"DEBUGGING : response message : {response}")
 
         return json.loads(response)
 
@@ -250,13 +246,25 @@ class Client:
 
         glosocket.send_msg(self._socket, json.dumps(message))
 
+    @staticmethod
+    def _is_response_ok(response: dict) -> bool:
+        if response["header"] == gloutils.Headers.OK:
+            return True
+        elif response["header"] == gloutils.Headers.ERROR:
+            payload = response["payload"]
+            print(f"\nERROR : {payload['error_message']}")
+            return False
+        else:
+            print(f"\nERROR : server's message was not recognised")
+            return False
+
     def run(self) -> None:
         """Point d'entrée du client."""
         should_quit = False
 
         while not should_quit:
             if not self._username:
-                action = input(f"{gloutils.CLIENT_AUTH_CHOICE}\n")
+                action = input(f"\n{gloutils.CLIENT_AUTH_CHOICE}\n")
 
                 match int(action):
                     case 1:
@@ -269,7 +277,7 @@ class Client:
                     case _:
                         print("La valeur entrée ne corresponds pas à une des options listées")
             else:
-                action = input(f"{gloutils.CLIENT_USE_CHOICE}\n")
+                action = input(f"\n{gloutils.CLIENT_USE_CHOICE}\n")
 
                 match int(action):
                     case 1:
@@ -295,37 +303,20 @@ def _main() -> int:
     return 0
 
 
-def _payload_to_stats(stats: str) -> gloutils.StatsPayload:
-    return gloutils.StatsPayload(
+def _payload_to_stats(stats: dict) -> gloutils.StatsPayload:
+    return gloutils.STATS_DISPLAY.format(
         count=stats["count"],
         size=stats["size"]
     )
 
 
-def _email_content(email: str) -> gloutils.EmailContentPayload:
-    return gloutils.EmailContentPayload(
-        sender=email["sender"],
-        destination=email["destination"],
-        subject=email["subject"],
-        date=email["date"],
-        content=email["content"]
-    )
-
-
-def _email_display(email: gloutils.EmailContentPayload) -> str:
+def _payload_to_email(email: gloutils.EmailContentPayload) -> str:
     return gloutils.EMAIL_DISPLAY.format(
         sender=email["sender"],
         to=email["destination"],
         subject=email["subject"],
         date=email["date"],
         body=email["content"]
-    )
-
-
-def _stats_display(stats: gloutils.StatsPayload) -> str:
-    return gloutils.STATS_DISPLAY.format(
-        count=stats["count"],
-        size=stats["size"]
     )
 
 
