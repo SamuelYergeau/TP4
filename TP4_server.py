@@ -22,8 +22,10 @@ import gloutils
 
 SCALES = ["", "K", "M", "G", "T", "P", "E", "Z", "Y", "Br"]
 
+
 class Server:
     """Serveur mail @glo2000.ca."""
+
     def __init__(self) -> None:
         """
         Prépare le socket du serveur `_server_socket`
@@ -92,9 +94,11 @@ class Server:
         user_dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
 
         if not _is_username_valid(username):
-            return _error_message(f"le nom d’utilisateur {username} contient des caractères autres que alphanumériques,_, . ou -.")
+            return _error_message(
+                f"le nom d’utilisateur {username} contient des caractères autres que alphanumériques,_, . ou -.")
         if not _is_password_valid(password):
-            return _error_message("le mot de passe a moins de 10 caractères et/ou ne contient pas au moins une majuscule, une minuscule et un chiffre")
+            return _error_message(
+                "le mot de passe a moins de 10 caractères et/ou ne contient pas au moins une majuscule, une minuscule et un chiffre")
         if os.path.exists(user_dir_path):
             return _error_message("ce nom d'utilisateur existe déjà")
 
@@ -179,7 +183,7 @@ class Server:
                                     key=lambda data: data['date'],
                                     reverse=True)
         return emails_sorted_list
-    
+
     def _get_email(self, client_soc: socket.socket,
                    payload: gloutils.EmailChoicePayload
                    ) -> gloutils.GloMessage:
@@ -189,7 +193,7 @@ class Server:
         """
         username = self._logged_users[client_soc]
         choice = int(payload['choice'])
-        email = self._get_sorted_email_list(username)[choice-1]
+        email = self._get_sorted_email_list(username)[choice - 1]
 
         return _success_message(_email_content_payload(email))
 
@@ -229,16 +233,19 @@ class Server:
 
         Retourne un messange indiquant le succès ou l'échec de l'opération.
         """
+        destination = payload["destination"]
+        if re.search(r"(^[a-zA-Z0-9_\.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-\.]+$)", destination) is not None:
 
-        if re.search(fr"@{gloutils.SERVER_DOMAIN}?", payload["destination"]):
-            return self._handle_internal_email(payload)
-        return self._handle_external_email(payload)
+            if re.search(fr"@{gloutils.SERVER_DOMAIN}?", destination):
+                return self._handle_internal_email(payload)
+            else:
+                return self._handle_external_email(payload)
+
+        return _error_message("destinataire invalide")
 
     @staticmethod
     def _handle_external_email(payload: gloutils.EmailContentPayload) -> gloutils.GloMessage:
         destination = payload["destination"]
-        # TODO : regex that the email address is valid
-
 
         message = EmailMessage()
         message["From"] = payload["sender"]
@@ -257,7 +264,9 @@ class Server:
 
     @staticmethod
     def _handle_internal_email(payload: gloutils.EmailContentPayload) -> gloutils.GloMessage:
-        dir_path = os.path.join(gloutils.SERVER_DATA_DIR, payload["destination"].upper())
+        destination = payload['destination']
+        username = destination.replace(f"@{gloutils.SERVER_DOMAIN}", "", 1)
+        dir_path = os.path.join(gloutils.SERVER_DATA_DIR, username.upper())
         if os.path.exists(dir_path):
             file_path = os.path.join(dir_path, payload["subject"])
             _save(file_path, json.dumps(payload))
@@ -382,7 +391,7 @@ def _format_size(value: int, scale: str) -> str:
         current_scale_index = SCALES.index(scale)
         next_scale = SCALES[current_scale_index + 1]
 
-        new_value = value/1024
+        new_value = value / 1024
         if new_value >= 1024:
             return _format_size(new_value, next_scale)
 
