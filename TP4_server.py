@@ -73,6 +73,8 @@ class Server:
     def _remove_client(self, client_soc: socket.socket) -> None:
         """Retire le client des structures de données et ferme sa connexion."""
         self._logout(client_soc)
+        if client_soc in self._client_socs:
+            self._client_socs.remove(client_soc)
         client_soc.close()
 
     def _create_account(self, client_soc: socket.socket,
@@ -132,11 +134,10 @@ class Server:
 
     def _logout(self, client_soc: socket.socket) -> None:
         """Déconnecte un utilisateur."""
-        print(f"DEBUGGING : logging out user - disconnection socket {client_soc}")
-        self._client_socs.remove(client_soc)
+        if client_soc in self._logged_users:
+            del self._logged_users[client_soc]
 
-    def _get_email_list(self, client_soc: socket.socket
-                        ) -> gloutils.GloMessage:
+    def _get_email_list(self, client_soc: socket.socket) -> gloutils.GloMessage:
         """
         Récupère la liste des courriels de l'utilisateur associé au socket.
         Les éléments de la liste sont construits à l'aide du gabarit
@@ -178,7 +179,7 @@ class Server:
 
         emails_sorted_list = sorted(email_data_list,
                                     key=lambda data: data['date'],
-                                    reverse=True)
+                                    reverse=False)
         return emails_sorted_list
     
     def _get_email(self, client_soc: socket.socket,
@@ -207,7 +208,7 @@ class Server:
 
         if list_emails is None:
             nb_emails = 0
-        else : 
+        else:
             nb_emails = len(list_emails)
 
         user_dir_size = 0
@@ -219,8 +220,7 @@ class Server:
         stat_payload = gloutils.EmailChoicePayload(count=nb_emails, size=formatted_user_dir_size)
         return _success_message(stat_payload)
 
-    def _send_email(self, payload: gloutils.EmailContentPayload
-                    ) -> gloutils.GloMessage:
+    def _send_email(self, payload: gloutils.EmailContentPayload) -> gloutils.GloMessage:
         """
         Détermine si l'envoi est interne ou externe et:
         - Si l'envoi est interne, écris le message tel quel dans le dossier
@@ -237,12 +237,17 @@ class Server:
         # TODO : all the checks and stuff
 
         if re.search(r"@ulaval.ca?", payload["destination"]):
-            message = EmailMessage()
-            message["From"] = payload["sender"]
-            message["To"] = payload["destination"]
-            message["Subject"] = payload["subject"]
-            message["Date"] = payload["date"]
-            message.set_content(payload["content"])
+            return self._handle_external_email(payload)
+        return self._handle_internal_email(payload)
+
+    @staticmethod
+    def _handle_external_email(payload: gloutils.EmailContentPayload) -> gloutils.GloMessage:
+        message = EmailMessage()
+        message["From"] = payload["sender"]
+        message["To"] = payload["destination"]
+        message["Subject"] = payload["subject"]
+        message["Date"] = payload["date"]
+        message.set_content(payload["content"])
             try:
                 with smtplib.SMTP(host=gloutils.SMTP_SERVER, timeout=10) as connection:
                     connection.send_message(message)
@@ -252,6 +257,8 @@ class Server:
             except socket.timeout:
                 return _error_message("Le serveur SMTP est injoinable.")
 
+    @staticmethod
+    def _handle_internal_email(payload: gloutils.EmailContentPayload) -> gloutils.GloMessage:
         dir_path = os.path.join(gloutils.SERVER_DATA_DIR, payload["destination"].upper())
         if os.path.exists(dir_path):
             file_path = os.path.join(dir_path, payload["subject"])
@@ -261,8 +268,7 @@ class Server:
         dir_path = os.path.join(gloutils.SERVER_DATA_DIR, gloutils.SERVER_LOST_DIR)
         file_path = os.path.join(dir_path, payload["subject"])
         _save(file_path, str(payload))
-        return _error_message("functionnality was not yet implemented.")
-
+        return _error_message("Le destinataire n'existe pas.")
 
     def run(self):
         """Point d'entrée du serveur."""
@@ -343,7 +349,7 @@ def _is_password_valid(password: str) -> bool:
     vérifies que le mot de passe a moins de 10 caractères et
     contient au moins une majuscule, une minuscule et un chiffre
     """
-    return len(password) >= 10 and re.search(r"(0-9)?(a-z)?(A-Z)?", password) is not None
+    return len(password) >= 10 and re.search(r"(?=.*\d)(?=.*[a-z])(?=.*[A-Z])", password) is not None
 
 
 def _save_password(path: str, password: str) -> None:
