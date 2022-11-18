@@ -175,9 +175,23 @@ class Client:
         """
         asks the user for the informations necessary for the email
         """
-        dest: str = input("adresse email du destinataire : ")
-        subject: str = input("sujet du message : ")
-        body: str = input("corps du message : ")
+        dest: str = input("Adresse email du destinataire : ")
+        subject: str = input("Sujet du message : ")
+
+        # Insert body here
+        print("Corps du message (terminer par un point seul sur une ligne):")
+        lines = []
+        while True:
+            line = input()
+            if len(line) == 0:
+                lines.append("")
+            elif line[len(line) - 1] != ".":
+                lines.append(line)
+            else:
+                break
+
+        body = '\n'.join(lines)
+        body = body.encode("utf-8")
 
         return dest, subject, body
 
