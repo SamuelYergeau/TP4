@@ -230,12 +230,16 @@ class Server:
         Retourne un messange indiquant le succès ou l'échec de l'opération.
         """
 
-        if re.search(r"@ulaval.ca?", payload["destination"]):
-            return self._handle_external_email(payload)
-        return self._handle_internal_email(payload)
+        if re.search(fr"@{gloutils.SERVER_DOMAIN}?", payload["destination"]):
+            return self._handle_internal_email(payload)
+        return self._handle_external_email(payload)
 
     @staticmethod
     def _handle_external_email(payload: gloutils.EmailContentPayload) -> gloutils.GloMessage:
+        destination = payload["destination"]
+        # TODO : regex that the email address is valid
+
+
         message = EmailMessage()
         message["From"] = payload["sender"]
         message["To"] = payload["destination"]
