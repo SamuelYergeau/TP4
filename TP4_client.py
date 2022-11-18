@@ -103,7 +103,7 @@ class Client:
             emails = gloutils.EmailListPayload(email_list=response_payload["email_list"])
 
             if len(emails["email_list"]) == 0:
-                print("there is no emails in your inbox")
+                print("\nThere are no emails in your inbox.")
                 return
 
             choice = self._get_inbox_reading_choice(emails["email_list"])
@@ -120,7 +120,14 @@ class Client:
             print(f"{email}")
 
         choice = input("enter the number of the email you would like to consult\n")
-        return choice  # TODO : ajouter vérificaton que c'est bien dans la liste
+
+        if re.search(r"[^0-9]", choice) is not None:
+            print(f"\n'{choice}' n'est pas un nombre.")
+            return self._get_inbox_reading_choice(emails)
+
+        if int(choice) not in range(1, len(emails) + 1):
+            print(f"\n'{choice}' ne correspond pas au numéro d'un courriel listé.")
+            return self._get_inbox_reading_choice(emails)
 
     def _read_selected_email(self, email_id: int) -> None:
         """
@@ -169,9 +176,23 @@ class Client:
         TODO : checks that the body ends with a single dot on a line
         TODO : checks on the user's adress and stuff
         """
-        dest: str = input("adresse email du destinataire : ")
-        subject: str = input("sujet du message : ")
-        body: str = input("corps du message : ")
+        dest: str = input("Adresse email du destinataire : ")
+        subject: str = input("Sujet du message : ")
+
+        # Insert body here
+        print("Corps du message (terminer par un point seul sur une ligne):")
+        lines = []
+        while True:
+            line = input()
+            if len(line) == 0:
+                lines.append("")
+            elif line[len(line) - 1] != ".":
+                lines.append(line)
+            else:
+                break
+
+        body = '\n'.join(lines)
+        body = body.encode("utf-8")
 
         return dest, subject, body
 
