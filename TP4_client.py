@@ -10,6 +10,7 @@ import argparse
 import json
 import socket
 import sys
+import re
 from getpass import getpass
 
 import glosocket
@@ -108,7 +109,7 @@ class Client:
         emails = response_payload["email_list"]
 
         if len(emails) == 0:
-            print("there is no emails in your inbox")
+            print("\nthere is no emails in your inbox")
             return None
 
         return emails
@@ -135,7 +136,11 @@ class Client:
 
         choice = input("enter the number of the email you would like to consult\n")
 
-        if choice not in range(1, len(emails)):
+        if re.search(r"[^0-9]", choice) is not None:
+            print(f"\n'{choice}' n'est pas un nombre.")
+            return self._get_inbox_reading_choice(emails)
+
+        if int(choice) not in range(1, len(emails) + 1):
             print(f"\n'{choice}' ne correspond pas au numéro d'un courriel listé.")
             return self._get_inbox_reading_choice(emails)
 
@@ -191,9 +196,9 @@ class Client:
                 break
 
         body = '\n'.join(lines)
-        body = body.encode("utf-8")
+        body = body.encode('utf-8')
 
-        return dest, subject, body
+        return dest, subject, str(body)
 
     def _check_stats(self) -> None:
         """
@@ -257,6 +262,9 @@ class Client:
         while not should_quit:
             if not self._username:
                 action = input(f"\n{gloutils.CLIENT_AUTH_CHOICE}\n")
+                if re.search(r"[^0-9]", action) is not None:
+                    print(f"\n'{action}' n'est pas un nombre.")
+                    continue
 
                 match int(action):
                     case 1:
@@ -270,6 +278,9 @@ class Client:
                         print("La valeur entrée ne corresponds pas à une des options listées")
             else:
                 action = input(f"\n{gloutils.CLIENT_USE_CHOICE}\n")
+                if re.search(r"[^0-9]", action) is not None:
+                    print(f"\n'{action}' n'est pas un nombre.")
+                    continue
 
                 match int(action):
                     case 1:
