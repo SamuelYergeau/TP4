@@ -1,11 +1,11 @@
 """\
 GLO-2000 Travail pratique 4 - Serveur
 Noms et numéros étudiants:
--
+- Samuel Yergeau 111 266 125
 -
 -
 """
-
+from datetime import datetime
 from email.message import EmailMessage
 import hashlib
 import hmac
@@ -180,7 +180,7 @@ class Server:
             email_file.close()
 
         emails_sorted_list = sorted(email_data_list,
-                                    key=lambda data: data['date'],
+                                    key=lambda data: datetime.strptime(data['date'], "%a, %d %b %Y %H:%M:%S %z"),
                                     reverse=True)
         return emails_sorted_list
 
